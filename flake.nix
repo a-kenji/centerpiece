@@ -114,5 +114,10 @@
         shell = self.outputs.devShells.${system}.default;
         inherit cargoClippy;
       };
+      hmModules.${system}.default = import ./nixos-module.nix {
+        # inherit (self.outputs.packages.${system}) index-git-repositories;
+        centerpiece = self.outputs.packages.${system}.default;
+        index-git-repositories = self.outputs.packages.${system}.index-git-repositories;
+      };
     };
 }
