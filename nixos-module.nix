@@ -37,7 +37,8 @@ in
             Description = "Centerpiece - your trusty";
             Documentation = "https://github.com/friedow/centerpiece";
           };
-          script = "${index-git-repositories}/bin/index-git-repositories";
+          script = lib.getExe index-git-repositories;
+
           serviceConfig = {
             Type = "oneshot";
           };

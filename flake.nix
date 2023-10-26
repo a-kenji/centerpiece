@@ -106,6 +106,7 @@
             inherit cargoArtifacts;
             pname = "index-git-repositories";
             cargoExtraArgs = "-p ${pname}";
+            meta.mainProgram = pname;
           }
         );
       };
