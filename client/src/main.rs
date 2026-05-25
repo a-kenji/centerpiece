@@ -5,6 +5,7 @@ mod component;
 mod lock;
 mod model;
 mod plugin;
+mod theme;
 
 const APP_ID: &str = "centerpiece";
 use smithay_client_toolkit::shell::WaylandSurface;
@@ -78,12 +79,14 @@ struct Centerpiece {
     active_entry_index: usize,
     plugins: Vec<model::Plugin>,
     plugin_channels: Vec<async_channel::Receiver<Message>>,
+    color_scheme: theme::ColorScheme,
 }
 
 impl Centerpiece {
     fn new(_cc: &smithay_client_toolkit::shell::wlr_layer::LayerSurface) -> Self {
         let mut centerpiece = Self::default();
         println!("creating centerpiece");
+        centerpiece.color_scheme = theme::ColorScheme::detect();
         centerpiece.launch_plugins();
         centerpiece
     }
@@ -409,13 +412,21 @@ impl Centerpiece {
         ctx.all_styles_mut(move |style| style.text_styles = text_styles.clone());
 
         let settings = settings::Settings::get_or_init();
+        let colors = self.color_scheme.resolve(&settings.color);
+        // Base on the theme-appropriate defaults so the built-in widget visuals
+        // (separators, selection, hint text) match; Visuals::default() is dark.
+        let base = match colors.egui_theme {
+            egui::Theme::Dark => egui::Visuals::dark(),
+            egui::Theme::Light => egui::Visuals::light(),
+        };
         ctx.set_visuals_of(
-            egui::Theme::Dark,
+            colors.egui_theme,
             egui::Visuals {
-                override_text_color: Some(settings::hexcolor(&settings.color.text)),
-                ..Default::default()
+                override_text_color: Some(colors.text),
+                ..base
             },
         );
+        ctx.set_theme(colors.egui_theme);
     }
 
     fn update(&mut self, ctx: &egui::Context) {
@@ -436,6 +447,15 @@ impl Centerpiece {
         self.handle_messages(messages);
 
         let settings = settings::Settings::get_or_init();
+        let colors = self.color_scheme.resolve(&settings.color);
+
+        // On a light desktop the panel fill can blend into the background, so
+        // outline the window in the resolved text color (black by default) to
+        // keep its edges visible. Dark theme already contrasts, so leave it bare.
+        let window_stroke = match colors.egui_theme {
+            egui::Theme::Light => egui::Stroke::new(1., colors.text),
+            egui::Theme::Dark => egui::Stroke::NONE,
+        };
 
         egui::CentralPanel::default()
             .frame(egui::Frame::new())
@@ -446,7 +466,8 @@ impl Centerpiece {
                         ..Default::default()
                     })
                     .corner_radius(0.5 * crate::REM)
-                    .fill(settings::hexcolor(&settings.color.background))
+                    .fill(colors.background)
+                    .stroke(window_stroke)
                     .show(ui, |ui| {
                         let response = component::query_input::view(ui, &mut self.query);
                         response.request_focus();
