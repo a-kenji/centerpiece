@@ -1,7 +1,6 @@
 pub fn view(ui: &mut egui::Ui, entry: &crate::model::Entry, active: bool) {
-    let settings = settings::Settings::get_or_init();
     let stroke_color = if active {
-        settings::hexcolor(&settings.color.text)
+        ui.visuals().text_color()
     } else {
         egui::Color32::TRANSPARENT
     };

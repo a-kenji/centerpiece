@@ -5,6 +5,7 @@ mod component;
 mod lock;
 mod model;
 mod plugin;
+mod theme;
 
 const APP_ID: &str = "centerpiece";
 use smithay_client_toolkit::shell::WaylandSurface;
@@ -78,12 +79,14 @@ struct Centerpiece {
     active_entry_index: usize,
     plugins: Vec<model::Plugin>,
     plugin_channels: Vec<async_channel::Receiver<Message>>,
+    color_scheme: theme::ColorScheme,
 }
 
 impl Centerpiece {
     fn new(_cc: &smithay_client_toolkit::shell::wlr_layer::LayerSurface) -> Self {
         let mut centerpiece = Self::default();
         println!("creating centerpiece");
+        centerpiece.color_scheme = theme::ColorScheme::detect();
         centerpiece.launch_plugins();
         centerpiece
     }
@@ -409,13 +412,19 @@ impl Centerpiece {
         ctx.all_styles_mut(move |style| style.text_styles = text_styles.clone());
 
         let settings = settings::Settings::get_or_init();
+        let colors = self.color_scheme.resolve(&settings.color);
+        let base = match colors.egui_theme {
+            egui::Theme::Dark => egui::Visuals::dark(),
+            egui::Theme::Light => egui::Visuals::light(),
+        };
         ctx.set_visuals_of(
-            egui::Theme::Dark,
+            colors.egui_theme,
             egui::Visuals {
-                override_text_color: Some(settings::hexcolor(&settings.color.text)),
-                ..Default::default()
+                override_text_color: Some(colors.text),
+                ..base
             },
         );
+        ctx.set_theme(colors.egui_theme);
     }
 
     fn update(&mut self, ui: &mut egui::Ui) {
@@ -437,6 +446,9 @@ impl Centerpiece {
         self.handle_messages(messages);
 
         let settings = settings::Settings::get_or_init();
+        let colors = self.color_scheme.resolve(&settings.color);
+
+        let window_stroke = egui::Stroke::new(1., colors.text);
 
         egui::Frame::new()
             .inner_margin(egui::epaint::MarginF32 {
@@ -444,7 +456,8 @@ impl Centerpiece {
                 ..Default::default()
             })
             .corner_radius(0.5 * crate::REM)
-            .fill(settings::hexcolor(&settings.color.background))
+            .fill(colors.background)
+            .stroke(window_stroke)
             .show(ui, |ui| {
                 let response = component::query_input::view(ui, &mut self.query);
                 response.request_focus();
@@ -454,7 +467,16 @@ impl Centerpiece {
 
                 let entries = self.entries();
                 if !entries.is_empty() {
-                    ui.add(Separator::default().spacing(0.));
+                    let inset = 0.0025 * ui.available_width();
+                    egui::Frame::new()
+                        .inner_margin(egui::epaint::MarginF32 {
+                            left: inset,
+                            right: inset,
+                            ..Default::default()
+                        })
+                        .show(ui, |ui| {
+                            ui.add(Separator::default().spacing(0.));
+                        });
                 }
 
                 let mut divider_added = true;
